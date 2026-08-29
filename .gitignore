@@ -1,2 +1,10 @@
 .DS_Store
 shots/
+
+# Music Jurek dropped in by hand. These are commercial tracks - they stay local,
+# they do not go into a public repo. audio/manifest.json is tracked so the slots
+# are documented; the game falls back to its synth beds when the files are absent.
+v1/audio/*.mp3
+v1/audio/*.ogg
+v1/audio/*.wav
+v1/audio/*.m4a

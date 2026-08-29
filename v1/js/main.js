@@ -94,6 +94,8 @@ async function boot() {
   audio.load((p) => hud.bootText('fetching audio ' + Math.round(p * 100) + '%')).then((r) => {
     audio.loop('buzz', 'buzz', 0.0, 1.0);
     audio.loop('mains', 'mains', 0.0, 1.0);
+    audio.setMusic(over ? null : 'opening');
+    setTimeout(() => { if (!over && entity.state < 3) audio.setMusic('explore'); }, 42000);
     if (r.failed.length) console.info('[noclip] synth fallback for:', r.failed.join(', '));
   });
 
@@ -187,6 +189,7 @@ function buildPickups() {
 let noise = 0;
 let nextEvent = 22;
 let breathT = 3;
+let musicResume = 0;
 
 function onEntityState(s) {
   if (s === STATE.STALK) {
@@ -202,9 +205,9 @@ function onEntityState(s) {
   } else if (s === STATE.AWARE) {
     audio.play('thud', { vol: 0.4, rate: 0.6 });
   } else if (s === STATE.DORMANT) {
-    audio.setMusic('ambient');
+    audio.setMusic('explore');
   }
-  if (s === STATE.STALK || s === STATE.AWARE) audio.setMusic('ambient');
+  if (s === STATE.STALK || s === STATE.AWARE) audio.setMusic('explore');
 }
 
 function director(dt) {
@@ -282,6 +285,7 @@ function kill() {
   dead = 1; deadT = 0; deaths++;
   player.alive = false;
   audio.setMusic(null);
+  musicResume = 6.0;
   audio.duckFor(3.0);
   audio.sting('scream', { vol: 1.0, rate: 0.92, dur: 2.6 });
   audio.sting('growl', { vol: 0.9, rate: 0.48, dur: 3.0 });
@@ -310,11 +314,12 @@ function respawn() {
   battery = Math.min(1, battery + 0.18);
   hud.blackout(false);
   hud.say('tape resumes. you are somewhere else now.', 4.5);
+  musicResume = 8.0;
 }
 
 function finish() {
   over = true;
-  audio.setMusic(null);
+  audio.setMusic('end');
   audio.play('static', { vol: 0.6, dur: 3.0, offset: 1 });
   hud.boot.removeAttribute('hidden');
   hud.boot.classList.remove('gone');
@@ -474,7 +479,10 @@ function step(dt) {
   audio.busSfx && audio.setLoopVol('mains', 0.12 + prox * 0.4, 0.5);
   if (entity.state === STATE.HUNT) fx.u('uSat', 0.55); else fx.u('uSat', 0.78);
 
-  if (entity.state === STATE.DORMANT && audio.musicMode === null) audio.setMusic('ambient');
+  if (musicResume > 0) {
+    musicResume -= dt;
+    if (musicResume <= 0 && entity.state < STATE.HUNT) audio.setMusic('explore');
+  } else if (entity.state === STATE.DORMANT && audio.musicMode === null) audio.setMusic('explore');
 
   // ---- pickups, notes, exit ---------------------------------------------
   for (const p of pickups) {

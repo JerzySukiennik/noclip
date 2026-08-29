@@ -70,6 +70,8 @@ export class Audio {
     this.fetched = 0;
     this.failed = [];
     this.musicMode = null;
+    this.tracks = null;
+    this.hasMusic = false;
   }
 
   init() {
@@ -91,20 +93,31 @@ export class Audio {
 
   async load(onProgress) {
     this.init();
+    // Local music first: it is on disk and must never wait on a remote host.
+    await this.loadLocalMusic();
+    if (this.hasMusic && this.musicMode) { const m = this.musicMode; this.musicMode = null; this.setMusic(m); }
+
     const names = Object.keys(SAMPLES);
     let done = 0;
     for (const n of names) {
-      try {
-        const url = await commonsUrl(SAMPLES[n].file);
-        const r = await fetch(url, { mode: 'cors' });
-        if (!r.ok) throw new Error(r.status);
-        const ab = await r.arrayBuffer();
-        this.buf[n] = await this.ctx.decodeAudioData(ab);
-        this.fetched++;
-      } catch (e) {
-        this.failed.push(n);
-        this.buf[n] = this.synth(n);
+      let ok = false;
+      for (let attempt = 0; attempt < 2 && !ok; attempt++) {
+        try {
+          const url = await commonsUrl(SAMPLES[n].file);
+          const ctl = new AbortController();
+          const timer = setTimeout(() => ctl.abort(), 12000);
+          const r = await fetch(url, { mode: 'cors', signal: ctl.signal });
+          clearTimeout(timer);
+          if (!r.ok) throw new Error(r.status);
+          const ab = await r.arrayBuffer();
+          this.buf[n] = await this.ctx.decodeAudioData(ab);
+          this.fetched++;
+          ok = true;
+        } catch (e) {
+          if (attempt === 0) await new Promise(r => setTimeout(r, 900));
+        }
       }
+      if (!ok) { this.failed.push(n); this.buf[n] = this.synth(n); }
       done++;
       if (onProgress) onProgress(done / names.length);
       await new Promise(r => setTimeout(r, 90));
@@ -114,33 +127,106 @@ export class Audio {
     this.growl2Spots = this.buf.growl2 ? this.loudSpots(this.buf.growl2, 1.6) : [];
     this.screamSpots = this.buf.scream ? this.loudSpots(this.buf.scream, 0.8) : [];
     this.breathSpots = this.buf.breath ? this.loudSpots(this.buf.breath, 1.2) : [];
-    await this.loadLocalMusic();
-    return { fetched: this.fetched, failed: this.failed.slice() };
+    return { fetched: this.fetched, failed: this.failed.slice(), music: this.hasMusic };
   }
 
+  // Music streams through an <audio> element instead of decodeAudioData: the
+  // tracks run to minutes each, and decoding them all would cost hundreds of MB.
   async loadLocalMusic() {
-    // Anything Jurek drops in audio/ wins over the synth beds.
     let man = null;
     try {
       const r = await fetch('audio/manifest.json', { cache: 'no-store' });
       if (r.ok) man = await r.json();
-    } catch (e) { /* no manifest is fine */ }
-    const probes = man ? man : {
-      ambient: ['audio/ambient.mp3', 'audio/ambient.ogg', 'audio/ambient.wav'],
-      chase: ['audio/chase.mp3', 'audio/chase.ogg', 'audio/chase.wav']
-    };
-    for (const slot of ['ambient', 'chase']) {
-      const list = Array.isArray(probes[slot]) ? probes[slot] : (probes[slot] ? [probes[slot]] : []);
-      for (const p of list) {
-        try {
-          const r = await fetch(p, { cache: 'no-store' });
-          if (!r.ok) continue;
-          const ab = await r.arrayBuffer();
-          this.buf['music_' + slot] = await this.ctx.decodeAudioData(ab);
-          break;
-        } catch (e) { /* try next candidate */ }
-      }
+    } catch (e) { /* no manifest is fine - the synth beds take over */ }
+
+    if (man && (man.opening || man.explore)) {
+      this.tracks = {
+        opening: man.opening ? 'audio/' + man.opening : null,
+        explore: (man.explore || []).map(f => 'audio/' + f),
+        hunt: man.hunt ? 'audio/' + man.hunt : null
+      };
+    } else if (man) {
+      const first = (k) => Array.isArray(man[k]) ? man[k][0] : man[k];
+      this.tracks = { opening: first('ambient') || null, explore: [], hunt: first('chase') || null };
+    } else {
+      this.tracks = { opening: null, explore: [], hunt: null };
     }
+    this.hasMusic = !!(this.tracks.opening || this.tracks.explore.length || this.tracks.hunt);
+    if (this.hasMusic) this._initPlayer();
+    return this.hasMusic;
+  }
+
+  _initPlayer() {
+    const el = new window.Audio();
+    el.preload = 'auto';
+    el.crossOrigin = 'anonymous';
+    this.el = el;
+    this.elSrc = this.ctx.createMediaElementSource(el);
+    this.elGain = this.ctx.createGain();
+    this.elGain.gain.value = 0;
+    this.elSrc.connect(this.elGain);
+    this.elGain.connect(this.busMus);
+    this.queue = [];
+    this.musicFails = 0;
+    el.addEventListener('ended', () => { this.musicFails = 0; this._nextTrack(); });
+    // Tracks can simply be absent (they are gitignored), so a run of failures
+    // must fall back to the synth bed instead of retrying forever.
+    el.addEventListener('error', () => {
+      this.musicFails++;
+      if (this.musicFails > this.tracks.explore.length + 1) {
+        this.hasMusic = false;
+        const m = this.musicMode;
+        this.musicMode = null;
+        if (m === 'chase') this.setMusic('chase'); else if (m) this.setMusic('explore');
+        return;
+      }
+      this._nextTrack();
+    });
+  }
+
+  _shuffledExplore() {
+    const a = this.tracks.explore.slice();
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = (Math.random() * (i + 1)) | 0;
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+  }
+
+  _nextTrack() {
+    if (this.musicMode !== 'explore') return;
+    if (!this.queue.length) this.queue = this._shuffledExplore();
+    const next = this.queue.shift();
+    if (!next) return;
+    // a beat of nothing between tracks - the silence is part of the room
+    clearTimeout(this._gap);
+    this._gap = setTimeout(() => {
+      if (this.musicMode !== 'explore') return;
+      this._playFile(next, 0.42);
+    }, 4000 + Math.random() * 9000);
+  }
+
+  _playFile(url, vol, fade = 3.0) {
+    if (!this.el) return;
+    this.el.src = url;
+    this.el.currentTime = 0;
+    const p = this.el.play();
+    if (p && p.catch) p.catch(() => { /* blocked until the first gesture */ });
+    const g = this.elGain.gain, n = this.ctx.currentTime;
+    g.cancelScheduledValues(n);
+    g.setValueAtTime(Math.max(0.0001, g.value), n);
+    g.linearRampToValueAtTime(vol, n + fade);
+  }
+
+  _stopFile(fade) {
+    if (!this.el) return;
+    clearTimeout(this._gap);
+    const g = this.elGain.gain, n = this.ctx.currentTime;
+    g.cancelScheduledValues(n);
+    g.setValueAtTime(Math.max(0.0001, g.value), n);
+    g.linearRampToValueAtTime(0.0001, n + fade);
+    const el = this.el;
+    setTimeout(() => { if (this.musicMode !== 'explore' && this.musicMode !== 'opening') { try { el.pause(); } catch (e) { } } }, fade * 1000 + 60);
   }
 
   // Sliced one-shots must start on a loud moment or they read as silence.
@@ -303,23 +389,59 @@ export class Audio {
     }
   }
 
-  // Music beds: local file if present, otherwise a two-oscillator synth drone.
+  // Modes: 'opening' over the fall, 'explore' shuffles the playlist quietly,
+  // 'chase' hard-cuts the music the way a tape stops and lets the drone take over.
   setMusic(mode) {
-    if (this.musicMode === mode) return;
+    if (!this.ready || this.musicMode === mode) return;
+    const prev = this.musicMode;
     this.musicMode = mode;
-    this.stopLoop('mus');
-    if (this.droneNodes) { this.droneNodes.forEach(n => { try { n.stop(); } catch (e) { } }); this.droneNodes = null; }
-    if (!mode) { this.busMus.gain.linearRampToValueAtTime(0.0001, this.ctx.currentTime + 1.2); return; }
-    const key = 'music_' + mode;
+    this._killDrone();
     this.busMus.gain.cancelScheduledValues(this.ctx.currentTime);
-    this.busMus.gain.linearRampToValueAtTime(mode === 'chase' ? 0.62 : 0.34, this.ctx.currentTime + (mode === 'chase' ? 0.35 : 3.0));
-    if (this.buf[key]) {
-      const h = this.play(key, { loop: true, vol: 1, bus: 'mus' });
-      if (h) this.loops['mus'] = h;
+    this.busMus.gain.setValueAtTime(1, this.ctx.currentTime);
+
+    if (!mode) { this._stopFile(1.2); return; }
+
+    if (mode === 'opening' && this.tracks && this.tracks.opening) {
+      this._playFile(this.tracks.opening, 0.5, 1.4);
       return;
     }
+    if (mode === 'explore') {
+      if (this.tracks && this.tracks.explore.length) {
+        if (prev === 'opening' && this.el && !this.el.paused) { this._fadeTo(0.42, 4); return; }
+        this._nextTrack();
+        return;
+      }
+      this._drone('ambient');
+      return;
+    }
+    if (mode === 'chase') {
+      if (this.tracks && this.tracks.hunt) { this._playFile(this.tracks.hunt, 0.62, 0.3); return; }
+      this._stopFile(0.28);
+      this._drone('chase');
+      return;
+    }
+    if (mode === 'end') {
+      if (this.tracks && this.tracks.opening) this._playFile(this.tracks.opening, 0.55, 2.0);
+      return;
+    }
+  }
+
+  _fadeTo(v, sec) {
+    const g = this.elGain.gain, n = this.ctx.currentTime;
+    g.cancelScheduledValues(n);
+    g.setValueAtTime(Math.max(0.0001, g.value), n);
+    g.linearRampToValueAtTime(v, n + sec);
+  }
+
+  _killDrone() {
+    if (!this.droneNodes) return;
+    this.droneNodes.forEach(n => { try { n.stop(); } catch (e) { } });
+    this.droneNodes = null;
+  }
+
+  _drone(kind) {
     const c = this.ctx;
-    const base = mode === 'chase' ? 46 : 36;
+    const base = kind === 'chase' ? 46 : 36;
     const nodes = [];
     for (let i = 0; i < 3; i++) {
       const o = c.createOscillator();
@@ -327,10 +449,10 @@ export class Audio {
       o.frequency.value = base * (i === 0 ? 1 : i === 1 ? 1.5 : 2.005);
       const g = c.createGain();
       g.gain.value = i === 2 ? 0.05 : 0.14;
-      const lfo = c.createOscillator(); lfo.frequency.value = mode === 'chase' ? 5.5 : 0.13;
-      const lg = c.createGain(); lg.gain.value = mode === 'chase' ? 0.09 : 0.06;
+      const lfo = c.createOscillator(); lfo.frequency.value = kind === 'chase' ? 5.5 : 0.13;
+      const lg = c.createGain(); lg.gain.value = kind === 'chase' ? 0.09 : 0.06;
       lfo.connect(lg); lg.connect(g.gain);
-      const f = c.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = mode === 'chase' ? 900 : 320;
+      const f = c.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = kind === 'chase' ? 900 : 320;
       o.connect(g); g.connect(f); f.connect(this.busMus);
       o.start(); lfo.start();
       nodes.push(o, lfo);
