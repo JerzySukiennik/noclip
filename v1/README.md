@@ -47,25 +47,38 @@ WebRTC data channels.
 
 ## Your own music
 
-Drop `ambient.*` and/or `chase.*` (mp3/ogg/wav) into `audio/`, or write an
-`audio/manifest.json` mapping the two slots to filenames. Without them the game
-synthesises its own drones.
+Put audio files in `audio/` and list them in `audio/manifest.json`:
+
+```json
+{ "opening": "theme.mp3", "explore": ["a.mp3", "b.mp3"], "hunt": null }
+```
+
+`opening` plays over the fall and again at the end of the tape; `explore` is shuffled
+underneath the wandering with a few seconds of silence between tracks; `hunt` scores
+the chase, or stays `null` so the music hard-cuts to a drone the moment it sees you.
+
+Audio files are gitignored — they stay on your machine. With none present the game
+synthesises its own beds, so it still works everywhere.
 
 ## Layout
 
 ```
-v1/
+
   index.html      viewfinder chrome + importmap
-  styles.css
-  js/config.js    tuning constants and the room-type roster
-  js/level.js     BSP zoning, generators, merged chunk geometry
-  js/tex.js       every surface drawn procedurally into a canvas
-  js/player.js    controller, walk cycle, hand-held camera, legs
-  js/entity.js    The Entity: rig, BFS pathing, five-state mind
-  js/audio.js     fetch + slice + synth fallback
-  js/fx.js        render target, bloom, the VHS composite
-  js/lights.js    pooled point lights chasing the nearest fixtures
-  js/net.js       host-authoritative multiplayer
-  js/hud.js       camcorder readouts
-  js/main.js      boot, the fall, the loop, the director
+styles.css
+js/config.js      tuning constants and the room-type roster
+js/level.js       BSP zoning, generators, merged chunk geometry
+js/tex.js         every surface drawn procedurally into a canvas
+js/player.js      controller, walk cycle, hand-held camera, legs
+js/entity.js      The Entity: rig, BFS pathing, five-state mind
+js/audio.js       fetch + slice + synth fallback
+js/fx.js          render target, bloom, the VHS composite
+js/lights.js      pooled point lights chasing the nearest fixtures
+js/net.js         host-authoritative multiplayer
+js/hud.js         camcorder readouts
+js/main.js        boot, the fall, the loop, the director
+tools/            dev-only: no-cache server, frame capture, browser probes
 ```
+
+Each deploy freezes a copy of the root into an immutable `vX.Y/` folder, reachable
+at `/vX.Y/`. The root is always the current build.

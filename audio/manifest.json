@@ -1,0 +1,12 @@
+{
+  "_note": "opening plays once over the fall and again at the end of the tape; explore is shuffled between them. Set hunt to a filename to score the chase, or leave null so the music hard-cuts to the drone.",
+  "opening": "Główna.mp3",
+  "explore": [
+    "Hey Kids-molina (slowed)  backroom (found fotage).mp3",
+    "Instupendo - Comfort Chain.mp3",
+    "Instupendo - Six Forty Seven.mp3",
+    "TEMPOREX - Numbers (Lyrics)  but I finally got a girlfriend and shes the bomb.mp3",
+    "Yungatita - 7 Weeks & 3 Days.mp3"
+  ],
+  "hunt": null
+}
