@@ -1,0 +1,40 @@
+<!doctype html>
+<!-- NOCLIP - found-footage backrooms experience. Entry point: importmap + canvas + viewfinder overlay. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>NOCLIP</title>
+<link rel="stylesheet" href="styles.css">
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+<canvas id="gl"></canvas>
+
+<div id="vf" aria-hidden="true">
+  <div class="vf-corner tl"></div><div class="vf-corner tr"></div>
+  <div class="vf-corner bl"></div><div class="vf-corner br"></div>
+  <div id="vf-rec"><span class="dot"></span>REC</div>
+  <div id="vf-bat"><span id="bat-lbl">BATT</span><span id="bat-bar"><i></i></span><span id="bat-pct">100</span></div>
+  <div id="vf-time">00:00:00:00</div>
+  <div id="vf-date">--/--/----</div>
+  <div id="vf-sig">SIG <span id="sig-bar"><i></i></span></div>
+  <div id="vf-mode">SP</div>
+  <div id="vf-warn"></div>
+  <div id="vf-sub"></div>
+</div>
+
+<div id="hint">click to look &nbsp;·&nbsp; WASD move &nbsp;·&nbsp; SHIFT run &nbsp;·&nbsp; C crouch &nbsp;·&nbsp; Q look back &nbsp;·&nbsp; F light &nbsp;·&nbsp; T share tape</div>
+<div id="tapecut"></div>
+<div id="boot">TAPE 01<br><small>loading</small></div>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
