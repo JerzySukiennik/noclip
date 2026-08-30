@@ -1,13 +1,13 @@
 {
-  "_note": "Music slots by situation. A track is a filename or {file,start,end} to use only part of it - the Hey Kids slice is its instrumental break, located by comparing mid to side energy in the vocal band.",
+  "_note": "Music slots by situation. A track is a filename or {file,start,end} to use only part of it. The explore slice is the intro, cut just before the first vocal - measured at 34-35 s by tracking mid vs side energy in the vocal band, since a lead vocal sits in the centre of the stereo image.",
   "menu": {
     "file": "Główna.mp3"
   },
   "explore": [
     {
       "file": "Hey Kids-molina (slowed)  backroom (found fotage).mp3",
-      "start": 182,
-      "end": 236
+      "start": 0,
+      "end": 33
     }
   ],
   "stalk": [
