@@ -1,9 +1,29 @@
 {
-  "_note": "Committed manifest. Empty on purpose: audio files are gitignored, so a deployed build has no music and uses its synth beds. To ship music, commit the files and fill these slots. Each slot takes a filename or {file,start,end} to use only part of a track. For local-only music use audio/manifest.local.json - gitignored, read only on localhost.",
-  "menu": null,
-  "explore": [],
-  "stalk": [],
+  "_note": "Music slots by situation. A track is a filename or {file,start,end} to use only part of it - the Hey Kids slice is its instrumental break, located by comparing mid to side energy in the vocal band.",
+  "menu": {
+    "file": "Główna.mp3"
+  },
+  "explore": [
+    {
+      "file": "Hey Kids-molina (slowed)  backroom (found fotage).mp3",
+      "start": 182,
+      "end": 236
+    }
+  ],
+  "stalk": [
+    {
+      "file": "Instupendo - Six Forty Seven.mp3",
+      "start": 95,
+      "end": 121.7
+    }
+  ],
   "hunt": null,
-  "resume": [],
-  "end": null
+  "resume": [
+    {
+      "file": "Instupendo - Comfort Chain.mp3"
+    }
+  ],
+  "end": {
+    "file": "Yungatita - 7 Weeks & 3 Days.mp3"
+  }
 }
